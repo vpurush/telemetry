@@ -6,6 +6,7 @@ import * as SQS from "aws-cdk-lib/aws-sqs";
 import * as IAM from "aws-cdk-lib/aws-iam";
 import { RustFunction } from 'cargo-lambda-cdk';
 import { Construct } from "constructs";
+import * as LambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 
 export class TelemetryStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -69,8 +70,18 @@ export class TelemetryStack extends cdk.Stack {
       value: telemetryApiGateway.url,
     });
 
-    new RustFunction(this, 'TelemetrySQSToS3RustFunction', {
+    const telemetrySQSToS3RustFunction = new RustFunction(this, 'TelemetrySQSToS3RustFunction', {
       manifestPath: '../telemetry-sqs-to-s3/Cargo.toml',
     });
+
+    telemetrySQSToS3RustFunction.addEnvironment('TELEMETRY_TEMPORARY_BUCKET_NAME', telemetryTemporaryBucket.bucketName);
+
+    telemetryTemporaryBucket.grantReadWrite(telemetrySQSToS3RustFunction);
+
+    // Add sqs trigger to the function
+    telemetrySQSToS3RustFunction.addEventSource(new LambdaEventSources.SqsEventSource(telemetryQueue, {
+      batchSize: 1000,
+      maxBatchingWindow: cdk.Duration.seconds(1), // Change it to 1hr later
+    }));
   }
 }
