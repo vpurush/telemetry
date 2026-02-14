@@ -1,0 +1,28 @@
+{
+  "name": "telemetry-cdk",
+  "version": "1.0.0",
+  "description": "AWS CDK app for telemetry",
+  "bin": {
+    "app": "bin/app.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "diff": "cdk diff",
+    "destroy": "cdk destroy"
+  },
+  "devDependencies": {
+    "@types/node": "25.2.3",
+    "aws-cdk": "2.1106.0",
+    "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.238.0",
+    "cargo-lambda-cdk": "^0.0.36",
+    "constructs": "10.4.5",
+    "source-map-support": "~0.5.21"
+  }
+}
