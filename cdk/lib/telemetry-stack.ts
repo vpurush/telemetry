@@ -70,7 +70,7 @@ export class TelemetryStack extends cdk.Stack {
     });
 
     new RustFunction(this, 'TelemetrySQSToS3RustFunction', {
-      manifestPath: 'telemetry-sqs-to-s3/Cargo.toml',
+      manifestPath: '../telemetry-sqs-to-s3/Cargo.toml',
     });
   }
 }
