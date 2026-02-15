@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import * as S3 from "aws-cdk-lib/aws-s3";
 import * as Lambda from "aws-cdk-lib/aws-lambda";
 import * as ApiGateway from "aws-cdk-lib/aws-apigateway";
+import * as Logs from "aws-cdk-lib/aws-logs";
 import * as SQS from "aws-cdk-lib/aws-sqs";
 import * as IAM from "aws-cdk-lib/aws-iam";
 import { RustFunction } from 'cargo-lambda-cdk';
@@ -25,13 +26,25 @@ export class TelemetryStack extends cdk.Stack {
       queueName: "telemetry-data-queue",
     });
 
+    const telemetryApiLogGroup = new Logs.LogGroup(this, "TelemetryApiLogGroup", {
+      logGroupName: "/aws/apigateway/telemetry-api",
+      retention: Logs.RetentionDays.ONE_MONTH,
+    });
+
     const telemetryApiGateway = new ApiGateway.RestApi(
       this,
       "TelemetryApiGateway",
       {
         restApiName: "telemetry-api",
+        deployOptions: {
+          accessLogDestination: new ApiGateway.LogGroupLogDestination(telemetryApiLogGroup),
+          accessLogFormat: ApiGateway.AccessLogFormat.jsonWithStandardFields(),
+          loggingLevel: ApiGateway.MethodLoggingLevel.ERROR,
+          metricsEnabled: true,
+        },
       },
     );
+    
 
     const telemetryApiGatewayRole = new IAM.Role(
       this,
