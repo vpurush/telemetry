@@ -39,7 +39,7 @@ export class TelemetryStack extends cdk.Stack {
         deployOptions: {
           accessLogDestination: new ApiGateway.LogGroupLogDestination(telemetryApiLogGroup),
           accessLogFormat: ApiGateway.AccessLogFormat.jsonWithStandardFields(),
-          loggingLevel: ApiGateway.MethodLoggingLevel.ERROR,
+          loggingLevel: ApiGateway.MethodLoggingLevel.INFO,
           metricsEnabled: true,
         },
       },
