@@ -65,7 +65,7 @@ export class TelemetryStack extends cdk.Stack {
         },
         requestTemplates: {
           // VTL template to transform the JSON body into a URL-encoded format
-          "application/json": `Action=SendMessage&MessageBody=$util.urlEncode($input.body)`,
+          "application/json": `Action=SendMessage&MessageBody=$input.body`,
         },
         integrationResponses: [
           {
