@@ -38,8 +38,8 @@ export class TelemetryStack extends cdk.Stack {
         restApiName: "telemetry-api",
         deployOptions: {
           accessLogDestination: new ApiGateway.LogGroupLogDestination(telemetryApiLogGroup),
-          accessLogFormat: ApiGateway.AccessLogFormat.jsonWithStandardFields(),
-          loggingLevel: ApiGateway.MethodLoggingLevel.INFO,
+          accessLogFormat: ApiGateway.AccessLogFormat.custom("{\"requestId\":\"$context.requestId\",\"ip\":\"$context.identity.sourceIp\",\"user\":\"$context.identity.user\",\"caller\":\"$context.identity.caller\",\"requestTime\":\"$context.requestTime\",\"httpMethod\":\"$context.httpMethod\",\"resourcePath\":\"$context.resourcePath\",\"status\":\"$context.status\",\"protocol\":\"$context.protocol\",\"responseLength\":\"$context.responseLength\", \"errorMessage\": \"$context.error.message\", \"errorMessageString\": \"$context.error.messageString\", \"errorType\": \"$context.error.type\", \"errorCause\": \"$context.error.cause\" }"),
+          loggingLevel: ApiGateway.MethodLoggingLevel.INFO,          
           metricsEnabled: true,
         },
       },
