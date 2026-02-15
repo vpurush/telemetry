@@ -57,7 +57,7 @@ export class TelemetryStack extends cdk.Stack {
 
     const telemetryAPIGatewaySQSIntegration = new ApiGateway.AwsIntegration({
       service: "sqs",
-      path: telemetryQueue.queueName,
+      path: `${this.account}/${telemetryQueue.queueName}`,
       options: {
         credentialsRole: telemetryApiGatewayRole,
         requestParameters: {
