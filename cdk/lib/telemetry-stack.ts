@@ -101,7 +101,13 @@ export class TelemetryStack extends cdk.Stack {
 
     telemetryApiGateway.root
       .addResource("telemetry")
-      .addMethod("POST", telemetryAPIGatewaySQSIntegration);
+      .addMethod("POST", telemetryAPIGatewaySQSIntegration, {
+        methodResponses: [
+          {
+            statusCode: "200",
+          },
+        ],
+      });
 
     new cdk.CfnOutput(this, "TelemetryApiGatewayUrl", {
       value: telemetryApiGateway.url,
