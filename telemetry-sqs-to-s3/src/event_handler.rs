@@ -11,6 +11,18 @@ pub(crate)async fn function_handler(event: LambdaEvent<SqsEvent>) -> Result<(), 
     let payload = event.payload;
     tracing::info!("Payload: {:?}", payload);
 
+    payload.records.iter().for_each(|r| {
+        tracing::info!("Record body: {:?}", r.body);
+        // Parse body as JSON
+        let body = r.body.as_deref().unwrap_or(""); 
+
+        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&body) {
+            tracing::info!("Parsed JSON: {:?}", json_value.as_object().unwrap());
+        } else {
+            tracing::warn!("Failed to parse body as JSON");
+        }
+    });
+
     Ok(())
 }
 

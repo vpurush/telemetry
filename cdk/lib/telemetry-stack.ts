@@ -1,3 +1,4 @@
+import * as path from "path";
 import * as cdk from "aws-cdk-lib";
 import * as S3 from "aws-cdk-lib/aws-s3";
 import * as Lambda from "aws-cdk-lib/aws-lambda";
@@ -8,6 +9,8 @@ import * as IAM from "aws-cdk-lib/aws-iam";
 import { RustFunction } from "cargo-lambda-cdk";
 import { Construct } from "constructs";
 import * as LambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
+import * as LambdaGoAlpha from '@aws-cdk/aws-lambda-go-alpha';
+import * as LambdaDotnet from '@aws-cdk/aws-lambda-dotnet';
 
 export class TelemetryStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -129,10 +132,61 @@ export class TelemetryStack extends cdk.Stack {
     telemetryTemporaryBucket.grantReadWrite(telemetrySQSToS3RustFunction);
 
     // Add sqs trigger to the function
-    telemetrySQSToS3RustFunction.addEventSource(
+    // telemetrySQSToS3RustFunction.addEventSource(
+    //   new LambdaEventSources.SqsEventSource(telemetryQueue, {
+    //     batchSize: 1000,
+    //     maxBatchingWindow: cdk.Duration.seconds(1), // Change it to 1hr later
+    //   }),
+    // );
+
+    const goHandlerPath = path.join(__dirname, "../../telemetry-sqs-to-s3-go/main.go");
+    // const telemetrySQSToS3GoFunction = new Lambda.Function(
+    //   this,
+    //   "TelemetrySQSToS3GoFunction",
+    //   {
+    //     runtime: Lambda.Runtime.PROVIDED_AL2023,
+    //     handler: "bootstrap",
+    //     code: Lambda.Code.fromAsset(goHandlerPath, {
+    //       bundling: {
+    //         image: cdk.DockerImage.fromRegistry("golang:1.21-bookworm"),
+    //         command: [
+    //           "bash",
+    //           "-c",
+    //           "sudo cp -r /asset-input/* /asset-output && cd /asset-output && go mod download && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /asset-output/bootstrap .",
+    //         ],
+    //       },
+    //     }),
+    //     environment: {
+    //     },
+    //     timeout: cdk.Duration.minutes(1),
+    //   },
+    // );
+
+    const telemetrySQSToS3GoFunction = new LambdaGoAlpha.GoFunction(this, "TelemetrySQSToS3GoFunction", {
+      entry: goHandlerPath
+    })
+
+    telemetryTemporaryBucket.grantReadWrite(telemetrySQSToS3GoFunction);
+    // telemetrySQSToS3GoFunction.addEventSource(
+    //   new LambdaEventSources.SqsEventSource(telemetryQueue, {
+    //     batchSize: 10,
+    //     maxBatchingWindow: cdk.Duration.seconds(1),
+    //   }),
+    // );
+
+
+    const telemetrySQSToS3DotnetFunction = new LambdaDotnet.DotNetFunction(this, 'TelemetrySQSToS3DotnetFunction', {
+      projectDir: '../telemetry-sqs-to-s3-dotnet',
+      runtime: Lambda.Runtime.DOTNET_10,
+      memorySize: 1024,      
+      bundling: {
+        msbuildParameters: ['/p:PublishAot=true'],
+      },
+    });
+    telemetrySQSToS3DotnetFunction.addEventSource(
       new LambdaEventSources.SqsEventSource(telemetryQueue, {
-        batchSize: 1000,
-        maxBatchingWindow: cdk.Duration.seconds(1), // Change it to 1hr later
+        batchSize: 10,
+        maxBatchingWindow: cdk.Duration.seconds(1),
       }),
     );
   }
