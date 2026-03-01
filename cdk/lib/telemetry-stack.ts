@@ -163,9 +163,10 @@ export class TelemetryStack extends cdk.Stack {
         environment: {
           TELEMETRY_TEMPORARY_BUCKET_NAME: telemetryTemporaryBucket.bucketName,
         },
-        // bundling: {
-        //   msbuildParameters: ['/p:PublishAot=true'],
-        // },
+        bundling: {
+          // msbuildParameters: ['/p:PublishAot=true'],
+          dockerImage: cdk.DockerImage.fromRegistry("public.ecr.aws/sam/build-dotnet10:latest"),
+        },
       },
     );
     telemetrySQSToS3DotnetFunction.addEventSource(
