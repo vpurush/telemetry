@@ -3,7 +3,7 @@ using Amazon.Lambda.SQSEvents;
 using Amazon.Lambda.RuntimeSupport;
 using Amazon.Lambda.Serialization.SystemTextJson;
 using System.Text.Json.Serialization;
-// using Newtonsoft.Json;
+using Amazon.S3;
 using System.Text.Json;
 using System.Diagnostics.CodeAnalysis;
 
@@ -92,13 +92,29 @@ public class Function
         compiledRecords += "]";
         Console.WriteLine($"Compiled Records: {compiledRecords}");
         //Parse body as JSON
-        var telemetryEvents = JsonSerializer.Deserialize<List<TelemetryEvent>>(compiledRecords, jsonSerializerOptions);
+        // var telemetryEvents = JsonSerializer.Deserialize<List<TelemetryEvent>>(compiledRecords, jsonSerializerOptions);
 
-        Console.WriteLine($"Parsed JSON: {telemetryEvents}");
+        // Console.WriteLine($"Parsed JSON: {telemetryEvents}");
 
+        // generate random alphanumeric of length 5
+        var random = new Random();
+        var randomString = "";
+        for (int i = 0; i < 5; i++)
+        {
+            randomString += random.Next(1, 10);
+        }
 
-        // TODO: Do interesting work based on the new message
-        // await Task.CompletedTask;
+        var s3Client = new AmazonS3Client();
+        var bucketName = Environment.GetEnvironmentVariable("TELEMETRY_TEMPORARY_BUCKET_NAME");
+        var key = $"telemetry-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}-{randomString}.json";
+        var putRequest = new Amazon.S3.Model.PutObjectRequest
+        {
+            BucketName = bucketName,
+            Key = key,
+            ContentBody = compiledRecords
+        };
+        await s3Client.PutObjectAsync(putRequest);
+        Console.WriteLine($"Successfully put object in S3 with key: {key} in bucket: {bucketName}");
     }
 }
 /// <summary>

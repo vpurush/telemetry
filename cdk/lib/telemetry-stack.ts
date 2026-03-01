@@ -9,8 +9,8 @@ import * as IAM from "aws-cdk-lib/aws-iam";
 import { RustFunction } from "cargo-lambda-cdk";
 import { Construct } from "constructs";
 import * as LambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
-import * as LambdaGoAlpha from '@aws-cdk/aws-lambda-go-alpha';
-import * as LambdaDotnet from '@aws-cdk/aws-lambda-dotnet';
+import * as LambdaGoAlpha from "@aws-cdk/aws-lambda-go-alpha";
+import * as LambdaDotnet from "@aws-cdk/aws-lambda-dotnet";
 
 export class TelemetryStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -153,19 +153,25 @@ export class TelemetryStack extends cdk.Stack {
     //   }),
     // );
 
-
-    const telemetrySQSToS3DotnetFunction = new LambdaDotnet.DotNetFunction(this, 'TelemetrySQSToS3DotnetFunction', {
-      projectDir: '../telemetry-sqs-to-s3-dotnet',
-      runtime: Lambda.Runtime.DOTNET_10,
-      memorySize: 512,      
-      // bundling: {
-      //   msbuildParameters: ['/p:PublishAot=true'],
-      // },
-    });
+    const telemetrySQSToS3DotnetFunction = new LambdaDotnet.DotNetFunction(
+      this,
+      "TelemetrySQSToS3DotnetFunction",
+      {
+        projectDir: "../telemetry-sqs-to-s3-dotnet",
+        runtime: Lambda.Runtime.DOTNET_10,
+        memorySize: 512,
+        environment: {
+          TELEMETRY_TEMPORARY_BUCKET_NAME: telemetryTemporaryBucket.bucketName,
+        },
+        // bundling: {
+        //   msbuildParameters: ['/p:PublishAot=true'],
+        // },
+      },
+    );
     telemetrySQSToS3DotnetFunction.addEventSource(
       new LambdaEventSources.SqsEventSource(telemetryQueue, {
-        batchSize: 10,
-        maxBatchingWindow: cdk.Duration.seconds(1),
+        batchSize: 1000,
+        maxBatchingWindow: cdk.Duration.minutes(5),
       }),
     );
     telemetryTemporaryBucket.grantReadWrite(telemetrySQSToS3DotnetFunction);
