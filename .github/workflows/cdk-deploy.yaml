@@ -26,6 +26,10 @@ jobs:
           cache: "npm"
           cache-dependency-path: 'cdk/package-lock.json'
 
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
 #      - name: Install dependencies for project
 #        run: npm install
 
