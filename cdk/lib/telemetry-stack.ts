@@ -116,20 +116,20 @@ export class TelemetryStack extends cdk.Stack {
       value: telemetryApiGateway.url,
     });
 
-    const telemetrySQSToS3RustFunction = new RustFunction(
-      this,
-      "TelemetrySQSToS3RustFunction",
-      {
-        manifestPath: "../telemetry-sqs-to-s3/Cargo.toml",
-      },
-    );
+    // const telemetrySQSToS3RustFunction = new RustFunction(
+    //   this,
+    //   "TelemetrySQSToS3RustFunction",
+    //   {
+    //     manifestPath: "../telemetry-sqs-to-s3/Cargo.toml",
+    //   },
+    // );
 
-    telemetrySQSToS3RustFunction.addEnvironment(
-      "TELEMETRY_TEMPORARY_BUCKET_NAME",
-      telemetryTemporaryBucket.bucketName,
-    );
+    // telemetrySQSToS3RustFunction.addEnvironment(
+    //   "TELEMETRY_TEMPORARY_BUCKET_NAME",
+    //   telemetryTemporaryBucket.bucketName,
+    // );
 
-    telemetryTemporaryBucket.grantReadWrite(telemetrySQSToS3RustFunction);
+    // telemetryTemporaryBucket.grantReadWrite(telemetrySQSToS3RustFunction);
 
     // Add sqs trigger to the function
     // telemetrySQSToS3RustFunction.addEventSource(
@@ -139,34 +139,13 @@ export class TelemetryStack extends cdk.Stack {
     //   }),
     // );
 
-    const goHandlerPath = path.join(__dirname, "../../telemetry-sqs-to-s3-go/main.go");
-    // const telemetrySQSToS3GoFunction = new Lambda.Function(
-    //   this,
-    //   "TelemetrySQSToS3GoFunction",
-    //   {
-    //     runtime: Lambda.Runtime.PROVIDED_AL2023,
-    //     handler: "bootstrap",
-    //     code: Lambda.Code.fromAsset(goHandlerPath, {
-    //       bundling: {
-    //         image: cdk.DockerImage.fromRegistry("golang:1.21-bookworm"),
-    //         command: [
-    //           "bash",
-    //           "-c",
-    //           "sudo cp -r /asset-input/* /asset-output && cd /asset-output && go mod download && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /asset-output/bootstrap .",
-    //         ],
-    //       },
-    //     }),
-    //     environment: {
-    //     },
-    //     timeout: cdk.Duration.minutes(1),
-    //   },
-    // );
+    // const goHandlerPath = path.join(__dirname, "../../telemetry-sqs-to-s3-go/main.go");
 
-    const telemetrySQSToS3GoFunction = new LambdaGoAlpha.GoFunction(this, "TelemetrySQSToS3GoFunction", {
-      entry: goHandlerPath
-    })
+    // const telemetrySQSToS3GoFunction = new LambdaGoAlpha.GoFunction(this, "TelemetrySQSToS3GoFunction", {
+    //   entry: goHandlerPath
+    // })
 
-    telemetryTemporaryBucket.grantReadWrite(telemetrySQSToS3GoFunction);
+    // telemetryTemporaryBucket.grantReadWrite(telemetrySQSToS3GoFunction);
     // telemetrySQSToS3GoFunction.addEventSource(
     //   new LambdaEventSources.SqsEventSource(telemetryQueue, {
     //     batchSize: 10,
@@ -178,10 +157,10 @@ export class TelemetryStack extends cdk.Stack {
     const telemetrySQSToS3DotnetFunction = new LambdaDotnet.DotNetFunction(this, 'TelemetrySQSToS3DotnetFunction', {
       projectDir: '../telemetry-sqs-to-s3-dotnet',
       runtime: Lambda.Runtime.DOTNET_10,
-      memorySize: 1024,      
-      bundling: {
-        msbuildParameters: ['/p:PublishAot=true'],
-      },
+      memorySize: 512,      
+      // bundling: {
+      //   msbuildParameters: ['/p:PublishAot=true'],
+      // },
     });
     telemetrySQSToS3DotnetFunction.addEventSource(
       new LambdaEventSources.SqsEventSource(telemetryQueue, {
@@ -189,5 +168,6 @@ export class TelemetryStack extends cdk.Stack {
         maxBatchingWindow: cdk.Duration.seconds(1),
       }),
     );
+    telemetryTemporaryBucket.grantReadWrite(telemetrySQSToS3DotnetFunction);
   }
 }

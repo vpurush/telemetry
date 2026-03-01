@@ -3,16 +3,23 @@ using Amazon.Lambda.SQSEvents;
 using Amazon.Lambda.RuntimeSupport;
 using Amazon.Lambda.Serialization.SystemTextJson;
 using System.Text.Json.Serialization;
-using Newtonsoft.Json;
+// using Newtonsoft.Json;
+using System.Text.Json;
+using System.Diagnostics.CodeAnalysis;
 
 
-// // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
-// [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
+// Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
+[assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
 
 namespace telemetry_sqs_to_s3_dotnet;
 
 public class Function
 {
+    private static JsonSerializerOptions jsonSerializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
     /// <summary>
     /// Default constructor. This constructor is used by Lambda to construct the instance. When invoked in a Lambda environment
     /// the AWS credentials will come from the IAM role associated with the function and the AWS region will be set to the
@@ -42,10 +49,7 @@ public class Function
     public static async Task FunctionHandler(SQSEvent evnt, ILambdaContext context)
     {
         Console.WriteLine($"function handler invoked");
-        foreach(var message in evnt.Records)
-        {
-            await ProcessMessageAsync(message, context);
-        }
+        await ProcessMessageAsync(evnt.Records, context);
     }
 
     // public static string FunctionHandler(string input, ILambdaContext context)
@@ -53,14 +57,44 @@ public class Function
     //     return input.ToUpper();
     // }
 
-    private static async Task ProcessMessageAsync(SQSEvent.SQSMessage message, ILambdaContext context)
+    // Declare enum with values 'Error', 'Trace', 'Performance'
+    public enum TelemetryType
     {
-        Console.WriteLine($"Processed message {message.Body}");
-        context.Logger.LogInformation($"Processed message {message.Body}");
+        Error,
+        Trace,
+        Performance
+    }
 
+    struct TelemetryEvent
+    {
+        public string Application { get; set; }
+        public DateTimeOffset Timestamp { get; set; }
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public TelemetryType Type { get; set; }
+        // public Dictionary<string, string> Data { get; set; }
+    }
+
+    [RequiresUnreferencedCode("Calls System.Text.Json.JsonSerializer.Deserialize<TValue>(String, JsonSerializerOptions)")]
+    private static async Task ProcessMessageAsync(List<SQSEvent.SQSMessage> records, ILambdaContext context)
+    {
+        Console.WriteLine($"Processing {records.Count} records");
+        // context.Logger.LogInformation($"Processed message {message.Body}");
+
+        var compiledRecords = "[";
+        for (int i = 0; i < records.Count; i++)
+        {
+            compiledRecords += records[i].Body;
+            if (i < records.Count - 1)
+            {
+                compiledRecords += ",";
+            }
+        }
+        compiledRecords += "]";
+        Console.WriteLine($"Compiled Records: {compiledRecords}");
         //Parse body as JSON
-        dynamic data = JsonConvert.DeserializeObject(message.Body);
-        Console.WriteLine($"Parsed JSON: {data}");
+        var telemetryEvents = JsonSerializer.Deserialize<List<TelemetryEvent>>(compiledRecords, jsonSerializerOptions);
+
+        Console.WriteLine($"Parsed JSON: {telemetryEvents}");
 
 
         // TODO: Do interesting work based on the new message
