@@ -1,0 +1,82 @@
+services:
+  telemetry-spark-master:
+    image: apache/spark:latest
+    container_name: telemetry-spark-master
+    depends_on:
+      - telemetry-rustfs
+    environment:
+      - SPARK_NO_DAEMONIZE=true
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    networks:
+      - telemetry-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  telemetry-spark-worker:
+    image: apache/spark:latest
+    container_name: telemetry-spark-worker
+    depends_on:
+      - telemetry-spark-master
+    environment:
+      - SPARK_NO_DAEMONIZE=true
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://telemetry-spark-master:7077
+    ports:
+      - "8081:8081"
+    networks:
+      - telemetry-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  telemetry-jupyter-notebook:
+    image: jupyter/pyspark-notebook:latest
+    container_name: telemetry-jupyter-notebook
+    depends_on:
+      - telemetry-spark-master
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - SPARK_MASTER=spark://telemetry-spark-master:7077
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - ./requirements.txt:/tmp/requirements.txt
+    networks:
+      - telemetry-network
+    command: bash -c "pip install -r /tmp/requirements.txt && start-notebook.sh --NotebookApp.token='' --NotebookApp.password=''"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/api"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  telemetry-rustfs:
+    image: rustfs/rustfs:1.0.0-alpha.85
+    container_name: telemetry-rustfs
+    volumes:
+      - ./data:/data
+    networks:
+      - telemetry-network
+    environment:
+      - RUSTFS_ADDRESS=:9000
+      - RUSTFS_ACCESS_KEY=rustfsadmin
+      - RUSTFS_SECRET_KEY=rustfsadmin
+      - RUSTFS_CONSOLE_ENABLE=true
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+networks:
+  telemetry-network:
+    driver: bridge

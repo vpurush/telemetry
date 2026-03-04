@@ -165,7 +165,9 @@ export class TelemetryStack extends cdk.Stack {
         },
         bundling: {
           // msbuildParameters: ['/p:PublishAot=true'],
-          dockerImage: cdk.DockerImage.fromRegistry("public.ecr.aws/sam/build-dotnet10:latest"),
+          dockerImage: cdk.DockerImage.fromRegistry(
+            "public.ecr.aws/sam/build-dotnet10:latest",
+          ),
         },
       },
     );
