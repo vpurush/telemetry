@@ -46,9 +46,11 @@ services:
     environment:
       - JUPYTER_ENABLE_LAB=yes
       - SPARK_MASTER=spark://telemetry-spark-master:7077
+      - DEVELOPMENT_MODE=true
     ports:
       - "8888:8888"
     volumes:
+      - ./src:/home/jovyan/src
       - ./notebooks:/home/jovyan/work
       - ./requirements.txt:/tmp/requirements.txt
     networks:
