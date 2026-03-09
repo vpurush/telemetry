@@ -1,11 +1,13 @@
 import * as path from "path";
 import * as cdk from "aws-cdk-lib";
 import * as S3 from "aws-cdk-lib/aws-s3";
+import * as S3Assets from "aws-cdk-lib/aws-s3-assets";
 import * as Lambda from "aws-cdk-lib/aws-lambda";
 import * as ApiGateway from "aws-cdk-lib/aws-apigateway";
 import * as Logs from "aws-cdk-lib/aws-logs";
 import * as SQS from "aws-cdk-lib/aws-sqs";
 import * as IAM from "aws-cdk-lib/aws-iam";
+import * as GlueAlpha from "@aws-cdk/aws-glue-alpha";
 import { RustFunction } from "cargo-lambda-cdk";
 import { Construct } from "constructs";
 import * as LambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
@@ -13,15 +15,26 @@ import * as LambdaGoAlpha from "@aws-cdk/aws-lambda-go-alpha";
 import * as LambdaDotnet from "@aws-cdk/aws-lambda-dotnet";
 
 export class TelemetryStack extends cdk.Stack {
+  telemetryTemporaryBucket: S3.Bucket;
+  telemetryPermanentBucket: S3.Bucket;
+
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     // Create a new S3 bucket for telemetry data
-    const telemetryTemporaryBucket = new S3.Bucket(
+    this.telemetryTemporaryBucket = new S3.Bucket(
       this,
       "TelemetryTemporaryBucket",
       {
         bucketName: "telemetry-temporary-data",
+      },
+    );
+
+    this.telemetryPermanentBucket = new S3.Bucket(
+      this,
+      "TelemetryPermanentBucket",
+      {
+        bucketName: "telemetry-permanent-data",
       },
     );
 
@@ -161,7 +174,8 @@ export class TelemetryStack extends cdk.Stack {
         runtime: Lambda.Runtime.DOTNET_10,
         memorySize: 512,
         environment: {
-          TELEMETRY_TEMPORARY_BUCKET_NAME: telemetryTemporaryBucket.bucketName,
+          TELEMETRY_TEMPORARY_BUCKET_NAME:
+            this.telemetryTemporaryBucket.bucketName,
         },
         bundling: {
           // msbuildParameters: ['/p:PublishAot=true'],
@@ -177,6 +191,49 @@ export class TelemetryStack extends cdk.Stack {
         maxBatchingWindow: cdk.Duration.minutes(5),
       }),
     );
-    telemetryTemporaryBucket.grantReadWrite(telemetrySQSToS3DotnetFunction);
+    this.telemetryTemporaryBucket.grantReadWrite(
+      telemetrySQSToS3DotnetFunction,
+    );
+
+    this.createTempToPermS3TransferGlueJob();
+  }
+
+  createTempToPermS3TransferGlueJob() {
+    const telemetryTempToPermS3TransferScript = new S3Assets.Asset(
+      this,
+      "TelemetryTempToPermS3TransferScript",
+      {
+        path: "../s3-to-s3-for-analytics/src/main.py",
+      },
+    );
+
+    const telemetryTempToPermS3TransferGlueRole = new IAM.Role(
+      this,
+      "TelemetryTempToPermS3TransferGlueRole",
+      {
+        assumedBy: new IAM.ServicePrincipal("glue.amazonaws.com"),
+      },
+    );
+
+    this.telemetryTemporaryBucket.grantRead(
+      telemetryTempToPermS3TransferGlueRole,
+    );
+    this.telemetryPermanentBucket.grantWrite(
+      telemetryTempToPermS3TransferGlueRole,
+    );
+
+    new GlueAlpha.PySparkFlexEtlJob(this, "TelemetryTempToPermETLJob", {
+      script: GlueAlpha.Code.fromBucket(
+        telemetryTempToPermS3TransferScript.bucket,
+        telemetryTempToPermS3TransferScript.s3ObjectKey,
+      ),
+      glueVersion: GlueAlpha.GlueVersion.V5_1, // Specify desired Glue version (e.g., 4.0 for Spark 3.3)
+      // runtime: GlueAlpha.GlueRuntime.V4_0,
+      role: telemetryTempToPermS3TransferGlueRole,
+      // Optional: configure job capacity, security, connections, etc.
+      workerType: GlueAlpha.WorkerType.G_1X,
+      numberOfWorkers: 2,
+      // workerType: glue.WorkerType.G_1X,
+    });
   }
 }

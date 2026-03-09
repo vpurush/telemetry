@@ -1,4 +1,6 @@
 
+import os
+
 import boto3
 from botocore.client import Config
 from pyspark.sql import DataFrame, SparkSession, Row
@@ -37,15 +39,34 @@ def update_filename_in_s3(old_key, new_key):
 
 def get_s3_client():    
     # Create an S3 client configured for RustFS
-    s3_client = boto3.client(
-        's3',
-        endpoint_url=RUSTFS_ENDPOINT,
-        aws_access_key_id=ACCESS_KEY,
-        aws_secret_access_key=SECRET_KEY,
-        config=Config(signature_version='s3v4'),
-        region_name=REGION
-    )
-    print(f"s3+client: {s3_client}")
+    
+    # if env variable DEVELOPMENT_MODE is set to "true", then use the following configuration for the S3 client
+    if os.getenv("DEVELOPMENT_MODE") == "true":
+        print("DEVELOPMENT_MODE is true, using development configuration for S3 client")
+        s3_client = boto3.client(
+            's3',
+            endpoint_url=RUSTFS_ENDPOINT,
+            aws_access_key_id=ACCESS_KEY,
+            aws_secret_access_key=SECRET_KEY,
+            config=Config(signature_version='s3v4'),
+            region_name=REGION
+        )
+    else:
+        print("DEVELOPMENT_MODE is not true, using default configuration for S3 client")
+        # In production, the Glue job will have an IAM role with permissions to access the S3 buckets, so we can use the default configuration which will pick up the credentials from the environment
+        s3_client = boto3.client('s3')
+    
+    
+    
+    # s3_client = boto3.client(
+    #     's3',
+    #     endpoint_url=RUSTFS_ENDPOINT,
+    #     aws_access_key_id=ACCESS_KEY,
+    #     aws_secret_access_key=SECRET_KEY,
+    #     config=Config(signature_version='s3v4'),
+    #     region_name=REGION
+    # )
+    # print(f"s3+client: {s3_client}")
     return s3_client
 
 telemetry_event_schema = StructType([
@@ -82,31 +103,6 @@ def embellish_dataframe(df: DataFrame):
     embellish_dataframe = embellish_dataframe.withColumn("data", when(col("data").isNull() | (size(col("data")) == 0), default_data_map).otherwise(col("data")))
     return embellish_dataframe
 
-# def write_dataframe_to_s3():
-#     def write_grouping(row: Row):
-#         application = row['application']
-#         timestamp_year = row['timestamp_year']
-#         timestamp_month = row['timestamp_month']
-#         timestamp_day = row['timestamp_day']
-        
-        
-#         # filtered_df = df.filter((col("application") == application) & (col("timestamp_year") == timestamp_year) & (col("timestamp_month") == timestamp_month) & (col("timestamp_day") == timestamp_day))
-#         output_path = f"application={application}/timestamp_year={timestamp_year}/timestamp_month={timestamp_month}/timestamp_day={timestamp_day}/data.txt"
-        
-#         # filtered_df = 
-#         # create a text file with sample content to write to S3
-#         sample_content = f"Sample data for application={application}, timestamp_year={timestamp_year}, timestamp_month={timestamp_month}, timestamp_day={timestamp_day}"
-#         local_file_path = f"/tmp/{application}_{timestamp_year}_{timestamp_month}_{timestamp_day}.txt"
-#         with open(local_file_path, 'w') as f:
-#             f.write(sample_content)
-#         # Upload the file to S3
-#         s3_client = get_s3_client()
-#         s3_client.upload_file(local_file_path, PERM_BUCKET_NAME, output_path)
-#         print(f"Wrote data for application={application}, timestamp_year={timestamp_year}, timestamp_month={timestamp_month}, timestamp_day={timestamp_day} to {output_path}")
-        
-#     return write_grouping
-
-
 def write_group_to_s3(pandas_df_group: pd_DataFrame):
     print("write_group_to_s3 called with group:")
     application = pandas_df_group['application'].iloc[0]
@@ -135,12 +131,7 @@ def process_dataframe(df: DataFrame):
     group_schema = group_schema.add(StructField("timestamp_month", IntegerType()))
     group_schema = group_schema.add(StructField("timestamp_day", IntegerType()))
     applicationGroups.applyInPandas(write_group_to_s3, schema=group_schema).show()
-    # grouped_df = applicationGroups.count()
     
-    # grouped_df.foreach(write_dataframe_to_s3())
-    
-    # applicationGroups.applyInPandas(write_dataframe_to_s3, schema="application string, timestamp_year int, timestamp_month int, timestamp_day int, csv string").write.mode("overwrite").text("s3a://temporary-telemetry/analytics_output/")
-
 def main():
     spark = create_spark_session()
     files = get_files_from_s3()
@@ -156,35 +147,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-# import pandas as pd
-# from pyspark.sql.functions import pandas_udf, PandasUDFType
-# from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
-
-# # Define the schema of the output DataFrame
-# output_schema = StructType([
-#     StructField("product_id", StringType()),
-#     StructField("total_quantity", IntegerType()),
-#     StructField("average_price", DoubleType())
-# ])
-
-# # Define a custom function to operate on each pandas group
-# def custom_group_function(pandas_df_group):
-#     # 'pandas_df_group' is a pandas DataFrame containing all rows for a single group
-#     product_id = pandas_df_group['product_id'].iloc[0]
-#     total_quantity = pandas_df_group['quantity_sold'].sum()
-#     average_price = pandas_df_group['price'].mean()
-    
-#     # Return a new pandas DataFrame with the desired result
-#     return pd.DataFrame([{
-#         "product_id": product_id,
-#         "total_quantity": total_quantity,
-#         "average_price": average_price
-#     }])
-
-# # Apply the custom function to the grouped data
-# result_df = df.groupBy("product_id").applyInPandas(custom_group_function, schema=output_schema)
-# result_df.show()
