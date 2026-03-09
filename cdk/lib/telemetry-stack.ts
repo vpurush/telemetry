@@ -222,6 +222,14 @@ export class TelemetryStack extends cdk.Stack {
       telemetryTempToPermS3TransferGlueRole,
     );
 
+    const telemetryGlueLoggingBucket = new S3.Bucket(
+      this,
+      "TelemetryGlueLoggingBucket",
+      {
+        bucketName: "telemetry-glue-logging-bucket",
+      },
+    );
+
     new GlueAlpha.PySparkFlexEtlJob(this, "TelemetryTempToPermETLJob", {
       script: GlueAlpha.Code.fromBucket(
         telemetryTempToPermS3TransferScript.bucket,
@@ -233,6 +241,10 @@ export class TelemetryStack extends cdk.Stack {
       // Optional: configure job capacity, security, connections, etc.
       workerType: GlueAlpha.WorkerType.G_1X,
       numberOfWorkers: 2,
+      sparkUI: {
+        bucket: telemetryGlueLoggingBucket,
+        prefix: "/glue-spark-ui-logs",
+      },
       // workerType: glue.WorkerType.G_1X,
     });
   }

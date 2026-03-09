@@ -1,5 +1,7 @@
 
 import os
+import random
+import string
 
 import boto3
 from botocore.client import Config
@@ -12,8 +14,8 @@ from pandas.core.api import DataFrame as pd_DataFrame
 RUSTFS_ENDPOINT = 'http://telemetry-rustfs:9000' 
 ACCESS_KEY = 'rustfsadmin'
 SECRET_KEY = 'rustfsadmin'
-TEMP_BUCKET_NAME = 'temporary-telelemetry'
-PERM_BUCKET_NAME = 'permanent-telemetry'
+TEMP_BUCKET_NAME = 'telemetry-temporary-data'
+PERM_BUCKET_NAME = 'telemetry-permanent-data'
 REGION = 'ap-southeast-2' # RustFS does not validate regions; any value works
 
 
@@ -103,6 +105,13 @@ def embellish_dataframe(df: DataFrame):
     embellish_dataframe = embellish_dataframe.withColumn("data", when(col("data").isNull() | (size(col("data")) == 0), default_data_map).otherwise(col("data")))
     return embellish_dataframe
 
+def generate_random_string(length):
+    # Define the character pool
+    characters = string.ascii_letters + string.digits
+    # Generate the string
+    random_string = ''.join(random.choice(characters) for _ in range(length))
+    return random_string
+
 def write_group_to_s3(pandas_df_group: pd_DataFrame):
     print("write_group_to_s3 called with group:")
     application = pandas_df_group['application'].iloc[0]
@@ -110,15 +119,17 @@ def write_group_to_s3(pandas_df_group: pd_DataFrame):
     timestamp_month = pandas_df_group['timestamp_month'].iloc[0]
     timestamp_day = pandas_df_group['timestamp_day'].iloc[0]    
     
-    output_path = f"application={application}/timestamp_year={timestamp_year}/timestamp_month={timestamp_month}/timestamp_day={timestamp_day}/data.txt"
+    file_suffix = generate_random_string(8)    
+    
+    output_path = f"application={application}/timestamp_year={timestamp_year}/timestamp_month={timestamp_month}/timestamp_day={timestamp_day}/data_{file_suffix}.txt"
     
     # write the pandas DataFrame to S3 as parquet file
-    local_file_path = f"/tmp/{application}_{timestamp_year}_{timestamp_month}_{timestamp_day}.parquet"
-    pandas_df_group.to_parquet(local_file_path, index=False)
-    local_csv_file_path = f"/tmp/{application}_{timestamp_year}_{timestamp_month}_{timestamp_day}.csv"
-    pandas_df_group.to_csv(local_csv_file_path, index=False)
+    local_parquet_file_path = f"/tmp/{application}_{timestamp_year}_{timestamp_month}_{timestamp_day}_{file_suffix}.parquet"
+    pandas_df_group.to_parquet(local_parquet_file_path, index=False)
+    # local_csv_file_path = f"/tmp/{application}_{timestamp_year}_{timestamp_month}_{timestamp_day}_{file_suffix}.csv"
+    # pandas_df_group.to_csv(local_csv_file_path, index=False)
     s3_client = get_s3_client()
-    s3_client.upload_file(local_csv_file_path, PERM_BUCKET_NAME, output_path)
+    s3_client.upload_file(local_parquet_file_path, PERM_BUCKET_NAME, output_path)
     
     print(f"Wrote data for application={application}, timestamp_year={timestamp_year}, timestamp_month={timestamp_month}, timestamp_day={timestamp_day} to {output_path}")
     return pandas_df_group
