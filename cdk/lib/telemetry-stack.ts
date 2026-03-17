@@ -8,6 +8,7 @@ import * as Logs from "aws-cdk-lib/aws-logs";
 import * as SQS from "aws-cdk-lib/aws-sqs";
 import * as IAM from "aws-cdk-lib/aws-iam";
 import * as GlueAlpha from "@aws-cdk/aws-glue-alpha";
+import * as Athena from "aws-cdk-lib/aws-athena";
 import { RustFunction } from "cargo-lambda-cdk";
 import { Construct } from "constructs";
 import * as LambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
@@ -17,6 +18,8 @@ import * as LambdaDotnet from "@aws-cdk/aws-lambda-dotnet";
 export class TelemetryStack extends cdk.Stack {
   telemetryTemporaryBucket: S3.Bucket;
   telemetryPermanentBucket: S3.Bucket;
+  telemetryAthenaQueryResultsBucket: S3.Bucket;
+  telemetryAthenaTableName: string = "telemetry";
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -196,6 +199,7 @@ export class TelemetryStack extends cdk.Stack {
     );
 
     this.createTempToPermS3TransferGlueJob();
+    this.createAthenaTableForPermanentBucket();
   }
 
   createTempToPermS3TransferGlueJob() {
@@ -245,7 +249,90 @@ export class TelemetryStack extends cdk.Stack {
         bucket: telemetryGlueLoggingBucket,
         prefix: "/glue-spark-ui-logs",
       },
+      defaultArguments: {
+        "--TELEMETRY_TABLE_NAME": this.telemetryAthenaTableName,
+      },
       // workerType: glue.WorkerType.G_1X,
+    });
+  }
+
+  createAthenaTableForPermanentBucket() {
+    const telemetryGlueDatabase = new GlueAlpha.Database(
+      this,
+      "TelemetryGlueDatabase",
+      {
+        databaseName: "telemetry_glue_database",
+      },
+    );
+
+    new GlueAlpha.S3Table(this, "TelemetryPermanentBucketGlueS3Table", {
+      database: telemetryGlueDatabase,
+      tableName: this.telemetryAthenaTableName,
+      columns: [
+        { name: "timestamp", type: GlueAlpha.Schema.TIMESTAMP },
+        { name: "type", type: GlueAlpha.Schema.STRING },
+        // { name: "data", type: GlueAlpha.Schema.STRING },
+      ],
+      partitionKeys: [
+        { name: "application", type: GlueAlpha.Schema.STRING },
+        { name: "timestamp_year", type: GlueAlpha.Schema.INTEGER },
+        { name: "timestamp_month", type: GlueAlpha.Schema.INTEGER },
+        { name: "timestamp_day", type: GlueAlpha.Schema.INTEGER },
+      ],
+      partitionProjection: {
+        application: GlueAlpha.PartitionProjectionConfiguration.enum({
+          values: ["elearn"], // List of application names for partition projection
+        }),
+        timestamp_year: GlueAlpha.PartitionProjectionConfiguration.integer({
+          min: 2024,
+          max: 2099,
+        }),
+        timestamp_month: GlueAlpha.PartitionProjectionConfiguration.integer({
+          min: 1,
+          max: 12,
+        }),
+        timestamp_day: GlueAlpha.PartitionProjectionConfiguration.integer({
+          min: 1,
+          max: 31,
+        }),
+      },
+      storageParameters: [
+        GlueAlpha.StorageParameter.custom("timestamp.formats", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"),
+      ],
+      dataFormat: GlueAlpha.DataFormat.PARQUET,
+      bucket: this.telemetryPermanentBucket,
+      s3Prefix: "telemetry/", // Optional prefix for the S3 location of the table data
+    });
+
+    this.telemetryAthenaQueryResultsBucket = new S3.Bucket(
+      this,
+      "TelemetryAthenaQueryResultsBucket",
+      {
+        bucketName: "telemetry-athena-qry-results",
+      },
+    );
+
+    const telemetryWorkGroup = new Athena.CfnWorkGroup(
+      this,
+      "TelemetryWorkGroup",
+      {
+        name: "TelemetryWorkGroup", // Using a specific name, e.g., "PrimaryWorkGroup"
+        state: "ENABLED",
+        workGroupConfiguration: {
+          resultConfiguration: {
+            outputLocation: `s3://${this.telemetryAthenaQueryResultsBucket.bucketName}/results/`,
+          },
+        },
+      },
+    );
+
+    new Athena.CfnNamedQuery(this, "MyCfnNamedQuery", {
+      name: "MySampleQuery",
+      database: telemetryGlueDatabase.databaseName,
+      queryString:
+        'SELECT * FROM "telemetry_glue_database"."telemetry" LIMIT 10;',
+      description: "A sample saved query created via CDK",
+      workGroup: telemetryWorkGroup.name,
     });
   }
 }

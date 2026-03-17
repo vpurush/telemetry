@@ -6,7 +6,7 @@ import string
 import boto3
 from botocore.client import Config
 from pyspark.sql import DataFrame, SparkSession, Row
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, MapType
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, MapType, TimestampType
 from pyspark.sql.functions import year, month, dayofmonth, when, col, size, create_map, lit
 from pandas.core.api import DataFrame as pd_DataFrame
 
@@ -73,9 +73,18 @@ def get_s3_client():
 
 telemetry_event_schema = StructType([
     StructField("application", StringType()),
-    StructField("timestamp", StringType()),
+    StructField("timestamp", TimestampType()),
     StructField("type", StringType()),
     StructField("data",  MapType(StringType(), StringType()), True)
+])
+
+telemetry_output_schema = StructType([
+    StructField("application", StringType()),
+    StructField("timestamp", TimestampType()),
+    StructField("type", StringType()),
+    StructField("timestamp_year", IntegerType()),
+    StructField("timestamp_month", IntegerType()),
+    StructField("timestamp_day", IntegerType())
 ])
 
 def append_file_contents_to_spark_dataframe(file_key, spark: SparkSession, df=None):
@@ -103,7 +112,7 @@ def embellish_dataframe(df: DataFrame):
     default_data_map = create_map(lit("__empty"), lit("true"))
     # set default value for data column to {"__empty": "true"} map if the map has not fields
     embellish_dataframe = embellish_dataframe.withColumn("data", when(col("data").isNull() | (size(col("data")) == 0), default_data_map).otherwise(col("data")))
-    return embellish_dataframe
+    return embellish_dataframe.select("application", "timestamp", "type", "timestamp_year", "timestamp_month", "timestamp_day")
 
 def generate_random_string(length):
     # Define the character pool
@@ -113,6 +122,9 @@ def generate_random_string(length):
     return random_string
 
 def write_group_to_s3(pandas_df_group: pd_DataFrame):
+    # get tablename from environment variable TELEMETRY_TABLE_NAME, if not set, use "telemetry" as default
+    telemetry_table_name = os.getenv("TELEMETRY_TABLE_NAME", "telemetry")
+    
     print("write_group_to_s3 called with group:")
     application = pandas_df_group['application'].iloc[0]
     timestamp_year = pandas_df_group['timestamp_year'].iloc[0]
@@ -121,7 +133,7 @@ def write_group_to_s3(pandas_df_group: pd_DataFrame):
     
     file_suffix = generate_random_string(8)    
     
-    output_path = f"application={application}/timestamp_year={timestamp_year}/timestamp_month={timestamp_month}/timestamp_day={timestamp_day}/data_{file_suffix}.txt"
+    output_path = f"{telemetry_table_name}/application={application}/timestamp_year={timestamp_year}/timestamp_month={timestamp_month}/timestamp_day={timestamp_day}/data_{file_suffix}.parquet"
     
     # write the pandas DataFrame to S3 as parquet file
     local_parquet_file_path = f"/tmp/{application}_{timestamp_year}_{timestamp_month}_{timestamp_day}_{file_suffix}.parquet"
@@ -138,10 +150,10 @@ def write_group_to_s3(pandas_df_group: pd_DataFrame):
 def process_dataframe(df: DataFrame):
     applicationGroups = df.groupBy("application", "timestamp_year", "timestamp_month", "timestamp_day")
     
-    group_schema = telemetry_event_schema.add(StructField("timestamp_year", IntegerType()))
-    group_schema = group_schema.add(StructField("timestamp_month", IntegerType()))
-    group_schema = group_schema.add(StructField("timestamp_day", IntegerType()))
-    applicationGroups.applyInPandas(write_group_to_s3, schema=group_schema).show()
+    # group_schema = telemetry_event_schema.add(StructField("timestamp_year", IntegerType()))
+    # group_schema = group_schema.add(StructField("timestamp_month", IntegerType()))
+    # group_schema = group_schema.add(StructField("timestamp_day", IntegerType()))
+    applicationGroups.applyInPandas(write_group_to_s3, schema=telemetry_output_schema).show()
     
 def main():
     spark = create_spark_session()
